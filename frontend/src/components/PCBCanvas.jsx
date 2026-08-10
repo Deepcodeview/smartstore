@@ -1187,38 +1187,18 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones, confThresh
           {/* Zone overlay canvas on top of MJPEG stream */}
           <div style={{ position:'relative', background:'#0a0e14', borderRadius:14, overflow:'hidden',
             border:`2px solid ${phase==='done'?'var(--green)':'var(--brand)'}` }}>
-            {phase === 'streaming' ? (
-              <>
-                <img
-                  src={`${API_BASE}/jobs/${jobId}/stream`}
-                  alt="Live stream"
-                  style={{ width:'100%', display:'block', minHeight:360 }}
-                  onError={e => { e.target.style.opacity='0.3'; }}
-                />
-                {/* Zone polygon overlay */}
-                <StreamZoneOverlay
-                  zones={drawnZones}
-                  entryZone={drawnEntryZone}
-                  exitZone={drawnExitZone}
-                />
-              </>
-            ) : (
-              <div style={{ padding:48, textAlign:'center' }}>
-                <div style={{ fontSize:40, marginBottom:12 }}>✅</div>
-                <div style={{ color:'#fff', fontWeight:700, fontSize:16 }}>Processing Complete!</div>
-                <div style={{ color:'#94a3b8', fontSize:12, marginTop:6 }}>View full analytics in Jobs page</div>
-                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
-                  <a href={`${API_BASE}/reports/${jobId}/pdf`} target="_blank" rel="noreferrer"
-                    style={{ padding:'10px 16px', background:'#dc2626', color:'#fff', borderRadius:8, fontSize:13, fontWeight:600, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:6 }}>
-                    📄 Download PDF Report
-                  </a>
-                  <a href={`${API_BASE}/reports/${jobId}/excel`} target="_blank" rel="noreferrer"
-                    style={{ padding:'10px 16px', background:'#16a34a', color:'#fff', borderRadius:8, fontSize:13, fontWeight:600, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:6 }}>
-                    📊 Download Excel Report
-                  </a>
-                </div>
-              </div>
-            )}
+            <img
+              src={phase === 'streaming' ? `${API_BASE}/jobs/${jobId}/stream` : `${API_BASE}/jobs/${jobId}/frame`}
+              alt="Video stream"
+              style={{ width:'100%', display:'block', minHeight:360 }}
+              onError={e => { e.target.style.opacity='0.3'; }}
+            />
+            {/* Zone polygon overlay */}
+            <StreamZoneOverlay
+              zones={drawnZones}
+              entryZone={drawnEntryZone}
+              exitZone={drawnExitZone}
+            />
 
             {/* HUD overlay */}
             <div style={{ position:'absolute', top:10, left:10, display:'flex', gap:6 }}>
@@ -1365,16 +1345,30 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones, confThresh
           )}
 
           {/* File info + reset */}
-          <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:10, padding:'8px 14px',
+          <div style={{ marginTop:10, display:'flex', flexDirection: 'column', gap: 10, padding:'12px 14px',
             background:'var(--bg)', borderRadius:'var(--r)', border:'1px solid var(--border)' }}>
-            <span style={{ fontSize:18 }}>🎬</span>
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:13, fontWeight:600 }}>{fileName}</div>
-              <div style={{ fontSize:11, color:'var(--text-muted)' }}>Job: {jobId?.slice(0,8)}… · {phase === 'done' ? '✅ Complete' : `⏳ ${progress}% done`}</div>
+            <div style={{ display: 'flex', alignItems:'center', gap:10 }}>
+              <span style={{ fontSize:18 }}>🎬</span>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:600 }}>{fileName}</div>
+                <div style={{ fontSize:11, color:'var(--text-muted)' }}>Job: {jobId?.slice(0,8)}… · {phase === 'done' ? '✅ Complete' : `⏳ ${progress}% done`}</div>
+              </div>
+              <button onClick={reset} style={{ padding:'6px 14px', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:600, background:'var(--bg)', border:'1px solid var(--border)', color:'var(--text-secondary)' }}>
+                🔄 New Video
+              </button>
             </div>
-            <button onClick={reset} style={{ padding:'6px 14px', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:600, background:'var(--bg)', border:'1px solid var(--border)', color:'var(--text-secondary)' }}>
-              🔄 New Video
-            </button>
+            {phase === 'done' && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                <a href={`${API_BASE}/reports/${jobId}/pdf`} target="_blank" rel="noreferrer"
+                  style={{ flex: 1, padding:'8px 14px', background:'#dc2626', color:'#fff', borderRadius:8, fontSize:12, fontWeight:700, textDecoration:'none', display:'inline-flex', alignItems:'center', justifyContent: 'center', gap:6 }}>
+                  📄 Download PDF Report
+                </a>
+                <a href={`${API_BASE}/reports/${jobId}/excel`} target="_blank" rel="noreferrer"
+                  style={{ flex: 1, padding:'8px 14px', background:'#16a34a', color:'#fff', borderRadius:8, fontSize:12, fontWeight:700, textDecoration:'none', display:'inline-flex', alignItems:'center', justifyContent: 'center', gap:6 }}>
+                  📊 Download Excel Report
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2191,58 +2185,6 @@ export default function PCBCanvas({ inspection, onSourceChange, zones, paused })
       {/* Hidden capture canvas */}
       <canvas ref={captureRef} style={{ display:'none' }}/>
 
-      {/* Dataset Capture Controls */}
-      {source !== 'simulation' && (
-        <div style={{ marginTop:14, padding:'14px 18px', background:dsCapturing?'#f0fdf4':'#f8fafc', border:`1.5px solid ${dsCapturing?'#bbf7d0':'var(--border)'}`, borderRadius:12 }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:dsCapturing?10:0 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <span style={{ fontSize:16 }}>{dsCapturing?'\uD83D\uDD34':'\uD83D\uDCF7'}</span>
-              <div>
-                <div style={{ fontWeight:700, fontSize:13, color:dsCapturing?'#166534':'var(--text-primary)' }}>
-                  {dsCapturing ? `Capturing... ${dsCaptured}/${dsTarget}` : 'Dataset Capture'}
-                </div>
-                <div style={{ fontSize:11, color:'var(--text-muted)' }}>
-                  {dsCapturing ? 'Auto-saving unique frames — move board for variety' : 'Save frames from active camera to training dataset'}
-                </div>
-              </div>
-            </div>
-            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              {!dsCapturing && (
-                <>
-                  <select value={dsLabel} onChange={e=>setDsLabel(e.target.value)} style={{ padding:'6px 10px', borderRadius:6, border:'1px solid var(--border)', fontSize:11, cursor:'pointer' }}>
-                    <option value="all_boards">All Boards (Single Folder)</option>
-                    <option value="clean">Clean (No Defect)</option>
-                    <option value="angle_top">Top View (0°)</option>
-                    <option value="angle_left">Left Angle (15°)</option>
-                    <option value="angle_right">Right Angle (15°)</option>
-                    <option value="angle_front">Front Angle (15°)</option>
-                    <option value="angle_back">Back Angle (15°)</option>
-                    <option value="to_label">Has Defects (Label Later)</option>
-                    <option value="short">Short Circuit Only</option>
-                    <option value="open_circuit">Open Circuit Only</option>
-                    <option value="mouse_bite">Mouse Bite Only</option>
-                    <option value="spur">Spur Only</option>
-                    <option value="spurious_copper">Spurious Copper Only</option>
-                    <option value="missing_hole">Missing Hole Only</option>
-                    <option value="multiple_defects">Multiple Defects (Label Later)</option>
-                  </select>
-                  <input value={dsBoard} onChange={e=>setDsBoard(e.target.value)} placeholder="Board name" style={{ width:80, padding:'6px 10px', borderRadius:6, border:'1px solid var(--border)', fontSize:11 }}/>
-                  <input type="number" value={dsTarget} onChange={e=>setDsTarget(parseInt(e.target.value)||50)} min="5" max="500" style={{ width:50, padding:'6px 8px', borderRadius:6, border:'1px solid var(--border)', fontSize:11 }}/>
-                  <button onClick={startDatasetCapture} style={{ padding:'6px 14px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:700, background:'var(--brand)', color:'#fff', border:'none' }}>\u25B6 Start</button>
-                </>
-              )}
-              {dsCapturing && (
-                <button onClick={stopDatasetCapture} style={{ padding:'6px 14px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:700, background:'var(--red)', color:'#fff', border:'none' }}>\u23F9 Stop</button>
-              )}
-            </div>
-          </div>
-          {dsCapturing && (
-            <div style={{ height:6, background:'#dcfce7', borderRadius:3, overflow:'hidden' }}>
-              <div style={{ height:'100%', background:'#16a34a', borderRadius:3, width:`${Math.min(dsCaptured/dsTarget*100,100)}%`, transition:'width .5s' }}/>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
