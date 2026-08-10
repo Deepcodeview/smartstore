@@ -222,6 +222,7 @@ def process_video(
                 break
 
             frame_count += 1
+            time_sec = round(frame_count / fps, 2)
             if frame_count == 1:
                 log.info(f"[{job_id}] Processing first frame...")
 
@@ -250,7 +251,7 @@ def process_video(
             if frame_count % 10 == 0 or frame_count == 1:
                 timeline.append({
                     "frame": frame_count,
-                    "time_sec": round(frame_count / fps, 2),
+                    "time_sec": time_sec,
                     "count": current_count,
                 })
 
@@ -270,7 +271,6 @@ def process_video(
                 shelf_accumulator[current_shelf_status] += 1
 
             # ── Alert Triggers ────────────────
-            time_sec = round(frame_count / fps, 2)
             
             # Shelf Empty Alert
             if shelf_enabled and current_shelf_status == "EMPTY":
