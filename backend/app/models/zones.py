@@ -49,8 +49,8 @@ class ZoneAnalyzer:
         # Per-zone unique global IDs seen
         self._zone_unique: Dict[str, set] = {name: set() for name in self.zones}
 
-        # Per-zone total person-frame count (for avg)
         self._zone_accumulator: Dict[str, int] = {name: 0 for name in self.zones}
+        self.current_occupancy: Dict[str, int] = {name: 0 for name in self.zones}
         self._frame_count: int = 0
 
     # ── public API ───────────────────────────────
@@ -81,6 +81,7 @@ class ZoneAnalyzer:
                 count = 0
 
             self._zone_accumulator[name] += count
+            self.current_occupancy[name] = count
             zone_counts[name] = count
 
         # Restore global_id to detections.data
@@ -113,6 +114,7 @@ class ZoneAnalyzer:
             "avg_people_per_frame": avg_zones,
             "unique_visitors": unique_per_zone,
             "most_popular_zone": most_popular,
+            "current_occupancy": self.current_occupancy,
             "heatmap": self.heatmap.tolist(),
         }
 

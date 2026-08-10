@@ -367,6 +367,7 @@ def process_video(
                                 "avg_per_frame": zone_analyzer.get_summary()["avg_people_per_frame"],
                                 "unique_visitors": zone_analyzer.get_summary()["unique_visitors"],
                                 "most_popular": zone_analyzer.get_summary()["most_popular_zone"],
+                                "current_occupancy": zone_analyzer.get_summary()["current_occupancy"],
                             },
                             "crossing_log": footfall.get_crossing_log(),
                         }

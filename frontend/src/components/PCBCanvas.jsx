@@ -1311,6 +1311,56 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones, confThresh
                   )}
                 </div>
               )}
+
+              {/* Zone-wise breakdown */}
+              {liveMetrics && liveMetrics.zones && (
+                <div style={{ marginTop: 14, background: 'var(--bg)', padding: '12px 16px', borderRadius: 12, border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.3px' }}>
+                      📍 Zone-wise Occupancy & Dwell
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      Total unique visitors in zones
+                    </span>
+                  </div>
+                  {Object.keys(liveMetrics.zones.avg_per_frame || {}).length === 0 ? (
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '10px 0' }}>
+                      No zones data processed yet. Make sure to draw and name zones!
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
+                      {Object.keys(liveMetrics.zones.avg_per_frame || {}).map((zName, i) => {
+                        const colors = ['#2563eb', '#16a34a', '#d97706', '#a855f7', '#0891b2'];
+                        const c = colors[i % colors.length];
+                        const curr = liveMetrics.zones.current_occupancy?.[zName] ?? 0;
+                        const unique = liveMetrics.zones.unique_visitors?.[zName] ?? 0;
+                        const avg = liveMetrics.zones.avg_per_frame?.[zName] ?? 0;
+                        return (
+                          <div key={zName} style={{
+                            padding: '12px 14px', borderRadius: 10, background: 'var(--white)',
+                            border: '1.5px solid var(--border)', borderTop: `3px solid ${c}`
+                          }}>
+                            <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--text-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span>{zName}</span>
+                              <span style={{ color: c, fontSize: 13, fontWeight: 800 }}>{curr} inside</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Unique:</span>
+                                <strong style={{ color: 'var(--text-secondary)' }}>{unique}</strong>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Avg:</span>
+                                <strong style={{ color: 'var(--text-secondary)' }}>{avg}</strong>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
