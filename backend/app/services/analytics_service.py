@@ -324,8 +324,6 @@ def process_video(
                     cv2.polylines(annotated, [entry_zone_poly], True, (0, 255, 0), 2)
                     cx, cy = int(entry_zone_poly[:, 0].mean()), int(entry_zone_poly[:, 1].mean())
                     cv2.putText(annotated, "ENTRY", (cx - 25, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                else:
-                    annotated = draw_virtual_line(annotated, footfall.line_position, color=(0, 255, 0), label="ENTRY")
                 if exit_zone_poly is not None:
                     overlay = annotated.copy()
                     cv2.fillPoly(overlay, [exit_zone_poly], (0, 0, 255))
@@ -333,8 +331,6 @@ def process_video(
                     cv2.polylines(annotated, [exit_zone_poly], True, (0, 0, 255), 2)
                     cx, cy = int(exit_zone_poly[:, 0].mean()), int(exit_zone_poly[:, 1].mean())
                     cv2.putText(annotated, "EXIT", (cx - 20, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-                else:
-                    annotated = draw_virtual_line(annotated, footfall.exit_line_position, color=(0, 0, 255), label="EXIT")
                 annotated = draw_zone_overlay(annotated, zone_counts, width, height, zone_polygons=custom_zones)
                 annotated = draw_tracked_persons(annotated, tracked)
                 annotated = draw_stats_panel(annotated, {
