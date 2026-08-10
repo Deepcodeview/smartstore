@@ -1348,6 +1348,7 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones, confThresh
                   )}
                 </div>
               )}
+            </div>
 
           {/* File info + reset */}
           <div style={{ marginTop:10, display:'flex', flexDirection: 'column', gap: 10, padding:'12px 14px',
