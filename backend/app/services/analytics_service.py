@@ -368,6 +368,7 @@ def process_video(
                                 "unique_visitors": zone_analyzer.get_summary()["unique_visitors"],
                                 "most_popular": zone_analyzer.get_summary()["most_popular_zone"],
                             },
+                            "crossing_log": footfall.get_crossing_log(),
                         }
                         if progress_cb:
                             progress_cb(last_progress if last_progress != -1 else 0, live_metrics)

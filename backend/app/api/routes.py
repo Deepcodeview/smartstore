@@ -309,8 +309,8 @@ def get_crossings(job_id: str, db: Session = Depends(get_db)):
     job = db.query(AnalyticsJob).filter(AnalyticsJob.job_id == job_id).first()
     if not job:
         raise HTTPException(404, "Job not found.")
-    if job.status != JobStatus.COMPLETED:
-        raise HTTPException(400, f"Job is not completed yet (status: {job.status}).")
+    if job.status not in (JobStatus.COMPLETED, JobStatus.PROCESSING):
+        raise HTTPException(400, f"Job is not active or completed (status: {job.status}).")
 
     events = (
         db.query(CrossingEvent)
@@ -459,6 +459,22 @@ def _run_analysis(file_path: str, job_id: str, zones_data: list = None,
                     j.progress = pct
                     if live_analytics:
                         j.result = live_analytics
+                        
+                        # Persist crossing events in real-time
+                        for event in live_analytics.get("crossing_log", []):
+                            exists = progress_db.query(CrossingEvent).filter(
+                                CrossingEvent.job_id == job_id,
+                                CrossingEvent.global_id == event["global_id"],
+                                CrossingEvent.event_type == event["type"],
+                                CrossingEvent.timestamp_sec == event["timestamp"]
+                            ).first()
+                            if not exists:
+                                progress_db.add(CrossingEvent(
+                                    job_id=job_id,
+                                    global_id=event["global_id"],
+                                    event_type=event["type"],
+                                    timestamp_sec=event["timestamp"],
+                                ))
                     progress_db.commit()
                 if alert:
                     progress_db.add(AlertLog(
@@ -483,12 +499,19 @@ def _run_analysis(file_path: str, job_id: str, zones_data: list = None,
 
         # Persist crossing events
         for event in analytics.get("crossing_log", []):
-            db.add(CrossingEvent(
-                job_id=job_id,
-                global_id=event["global_id"],
-                event_type=event["type"],
-                timestamp_sec=event["timestamp"],
-            ))
+            exists = db.query(CrossingEvent).filter(
+                CrossingEvent.job_id == job_id,
+                CrossingEvent.global_id == event["global_id"],
+                CrossingEvent.event_type == event["type"],
+                CrossingEvent.timestamp_sec == event["timestamp"]
+            ).first()
+            if not exists:
+                db.add(CrossingEvent(
+                    job_id=job_id,
+                    global_id=event["global_id"],
+                    event_type=event["type"],
+                    timestamp_sec=event["timestamp"],
+                ))
 
         # Strip the raw crossing_log from the JSON result (it's in crossing_events table)
         analytics.pop("crossing_log", None)

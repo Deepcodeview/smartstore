@@ -11,25 +11,51 @@ export default function Crossings() {
   const [filter,  setFilter]  = useState('all');
 
   useEffect(() => {
-    fetch(`${API_BASE}/jobs/`)
-      .then(r => r.ok ? r.json() : { jobs: [] })
-      .then(d => {
-        const completed = (d.jobs || []).filter(j => j.status === 'completed');
-        setJobs(completed);
-        if (completed.length > 0) setSelJob(completed[0].job_id);
-      })
-      .catch(() => {});
-  }, []);
+    const fetchJobs = () => {
+      fetch(`${API_BASE}/jobs/`)
+        .then(r => r.ok ? r.json() : { jobs: [] })
+        .then(d => {
+          const activeOrCompleted = (d.jobs || []).filter(
+            j => j.status === 'completed' || j.status === 'processing'
+          );
+          setJobs(activeOrCompleted);
+          if (activeOrCompleted.length > 0 && !selJob) {
+            setSelJob(activeOrCompleted[0].job_id);
+          }
+        })
+        .catch(() => {});
+    };
+    fetchJobs();
+    const interval = setInterval(fetchJobs, 4000);
+    return () => clearInterval(interval);
+  }, [selJob]);
 
   useEffect(() => {
     if (!selJob) return;
-    setLoading(true);
-    fetch(`${API_BASE}/jobs/${selJob}/crossings`)
-      .then(r => r.ok ? r.json() : { events: [] })
-      .then(d => setEvents(d.events || []))
-      .catch(() => setEvents([]))
-      .finally(() => setLoading(false));
-  }, [selJob]);
+    
+    const fetchCrossings = () => {
+      setLoading(true);
+      fetch(`${API_BASE}/jobs/${selJob}/crossings`)
+        .then(r => r.ok ? r.json() : { events: [] })
+        .then(d => setEvents(d.events || []))
+        .catch(() => setEvents([]))
+        .finally(() => setLoading(false));
+    };
+
+    fetchCrossings();
+
+    const isProcessing = jobs.find(j => j.job_id === selJob)?.status === 'processing';
+    let interval;
+    if (isProcessing) {
+      interval = setInterval(() => {
+        fetch(`${API_BASE}/jobs/${selJob}/crossings`)
+          .then(r => r.ok ? r.json() : { events: [] })
+          .then(d => setEvents(d.events || []))
+          .catch(() => {});
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [selJob, jobs]);
 
   const filtered = filter === 'all' ? events : events.filter(e => e.event_type === filter);
   const entries  = events.filter(e => e.event_type === 'entry').length;
@@ -41,8 +67,12 @@ export default function Crossings() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', flexShrink: 0 }}>Select Job:</label>
         <select className="form-input" style={{ maxWidth: 320 }} value={selJob || ''} onChange={e => setSelJob(e.target.value)}>
-          {jobs.length === 0 && <option value="">No completed jobs</option>}
-          {jobs.map(j => <option key={j.job_id} value={j.job_id}>{j.filename}</option>)}
+          {jobs.length === 0 && <option value="">No jobs found</option>}
+          {jobs.map(j => (
+            <option key={j.job_id} value={j.job_id}>
+              {j.filename} ({j.status === 'processing' ? `⏳ Processing ${j.progress}%` : '✅ Completed'})
+            </option>
+          ))}
         </select>
         <div style={{ display: 'flex', gap: 8 }}>
           <span style={{ padding: '4px 12px', background: 'var(--green-light)', color: 'var(--green)', border: '1px solid var(--green-border)', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
