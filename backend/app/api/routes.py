@@ -118,6 +118,7 @@ def start_camera_monitoring(
     zones: str = Form(...),
     entry_zone: str = Form(default="[]"),
     exit_zone: str  = Form(default="[]"),
+    conf: float = Form(0.35),
     db: Session = Depends(get_db),
 ):
     try:
@@ -141,7 +142,7 @@ def start_camera_monitoring(
 
     thread = threading.Thread(
         target=_run_analysis,
-        args=(camera_source, job_id, zones_data, entry_zone_pts, exit_zone_pts),
+        args=(camera_source, job_id, zones_data, entry_zone_pts, exit_zone_pts, conf),
         daemon=True,
     )
     thread.start()
@@ -199,6 +200,7 @@ def start_processing(
     zones: str = Form(...),
     entry_zone: str = Form(default="[]"),
     exit_zone: str  = Form(default="[]"),
+    conf: float = Form(0.35),
     db: Session = Depends(get_db),
 ):
     job = db.query(AnalyticsJob).filter(AnalyticsJob.job_id == job_id).first()
@@ -228,7 +230,7 @@ def start_processing(
 
     thread = threading.Thread(
         target=_run_analysis,
-        args=(file_path, job_id, zones_data, entry_zone_pts, exit_zone_pts),
+        args=(file_path, job_id, zones_data, entry_zone_pts, exit_zone_pts, conf),
         daemon=True,
     )
     thread.start()
@@ -269,6 +271,7 @@ def get_result(job_id: str, db: Session = Depends(get_db)):
     if not job:
         raise HTTPException(404, f"Job '{job_id}' not found.")
 
+    # Always return live analytics if available (updated every 30 frames during processing)
     return JobStatusResponse(
         job_id=job.job_id,
         status=job.status,
@@ -276,7 +279,7 @@ def get_result(job_id: str, db: Session = Depends(get_db)):
         created_at=job.created_at,
         completed_at=job.completed_at,
         error_message=job.error_message,
-        analytics=job.result,
+        analytics=job.result,   # live metrics during processing, final after completion
     )
 
 
@@ -435,7 +438,8 @@ def delete_job(job_id: str, db: Session = Depends(get_db)):
 
 # ── Background worker ─────────────────────────────────────────────────────────
 def _run_analysis(file_path: str, job_id: str, zones_data: list = None,
-                  entry_zone_data: list = None, exit_zone_data: list = None) -> None:
+                  entry_zone_data: list = None, exit_zone_data: list = None,
+                  conf: float = 0.35) -> None:
     """Runs in a daemon thread. Updates DB throughout processing."""
     from app.database.db import SessionLocal
 
@@ -474,6 +478,7 @@ def _run_analysis(file_path: str, job_id: str, zones_data: list = None,
             zones_data=zones_data,
             entry_zone_data=entry_zone_data,
             exit_zone_data=exit_zone_data,
+            conf=conf,
         )
 
         # Persist crossing events

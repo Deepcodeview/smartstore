@@ -75,6 +75,7 @@ def process_video(
     exit_line_ratio: float  = None,
     entry_direction: str    = "down",
     exit_direction: str     = "up",
+    conf: float = 0.35,
 ) -> dict:
     """
     Process a video file end-to-end.
@@ -150,7 +151,10 @@ def process_video(
     custom_zones = None
     if zones_data:
         custom_zones = {
-            z["name"]: np.array(z["points"], dtype=np.int32)
+            z["name"]: np.array(
+                [[int(p[0] * width / 100), int(p[1] * height / 100)] for p in z["points"]],
+                dtype=np.int32
+            )
             for z in zones_data
             if len(z.get("points", [])) >= 3
         }
@@ -160,11 +164,19 @@ def process_video(
     entry_zone_poly = None
     exit_zone_poly  = None
     if entry_zone_data and len(entry_zone_data) >= 3:
-        entry_zone_poly = np.array(entry_zone_data, dtype=np.int32)
-        log.info(f"[{job_id}] Entry zone: {len(entry_zone_data)} points")
+        # Points are in percentage (0-100) — convert to pixels
+        entry_zone_poly = np.array(
+            [[int(p[0] * width / 100), int(p[1] * height / 100)] for p in entry_zone_data],
+            dtype=np.int32
+        )
+        log.info(f"[{job_id}] Entry zone: {len(entry_zone_data)} points (pixel-converted)")
     if exit_zone_data and len(exit_zone_data) >= 3:
-        exit_zone_poly = np.array(exit_zone_data, dtype=np.int32)
-        log.info(f"[{job_id}] Exit zone: {len(exit_zone_data)} points")
+        # Points are in percentage (0-100) — convert to pixels
+        exit_zone_poly = np.array(
+            [[int(p[0] * width / 100), int(p[1] * height / 100)] for p in exit_zone_data],
+            dtype=np.int32
+        )
+        log.info(f"[{job_id}] Exit zone: {len(exit_zone_data)} points (pixel-converted)")
 
     effective_entry_ratio = entry_line_ratio if entry_line_ratio is not None else 0.40
     effective_exit_ratio  = exit_line_ratio  if exit_line_ratio  is not None else 0.70
@@ -223,7 +235,7 @@ def process_video(
                     log.debug(f"[{job_id}] Progress: {pct}%")
 
             # ── Person detection ──────────────
-            results    = person_model(frame, conf=PERSON_CONF, classes=[PERSON_CLASS_ID], verbose=False, device="cpu")[0]
+            results    = person_model(frame, conf=conf, classes=[PERSON_CLASS_ID], verbose=False, device="cpu")[0]
             detections = sv.Detections.from_ultralytics(results)
 
             # ── Tracking ─────────────────────
@@ -246,7 +258,7 @@ def process_video(
             dwell_tracker.update(tracked)
 
             # ── Footfall ──────────────────────
-            footfall.update(tracked)
+            footfall.update(tracked, time_sec=time_sec)
 
             # ── Zones ─────────────────────────
             zone_counts = zone_analyzer.update(tracked)   # uses tracked (with global_id)
@@ -342,27 +354,23 @@ def process_video(
                 except Exception:
                     pass
 
-                # Periodically update live stats in database for webcam/RTSP feeds (every 30 frames)
-                if total_frames <= 0 and frame_count % 30 == 0:
+                # Periodically update live stats in database (every 5 frames for both live and video)
+                if frame_count % 5 == 0:
                     try:
                         live_metrics = {
                             "total_unique_people": tracker.total_unique_people,
-                            "avg_people_per_frame": round(sum(zone_analyzer.get_summary()["avg_people_per_frame"].values()), 2),
                             "entries": footfall.entry_count,
                             "exits": footfall.exit_count,
                             "currently_inside": footfall.get_counts()["currently_inside"],
                             "shelf_status": current_shelf_status,
-                            "shelf_breakdown": shelf_accumulator,
-                            "dwell": dwell_tracker.get_summary(),
                             "zones": {
                                 "avg_per_frame": zone_analyzer.get_summary()["avg_people_per_frame"],
                                 "unique_visitors": zone_analyzer.get_summary()["unique_visitors"],
                                 "most_popular": zone_analyzer.get_summary()["most_popular_zone"],
                             },
-                            "timeline": timeline[-20:] if len(timeline) > 20 else timeline
                         }
                         if progress_cb:
-                            progress_cb(100, live_metrics)
+                            progress_cb(last_progress if last_progress != -1 else 0, live_metrics)
                     except Exception:
                         pass
 

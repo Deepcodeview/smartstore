@@ -59,7 +59,7 @@ class FootfallCounter:
         else:
             return prev_y >= line_y > cy
 
-    def update(self, tracked) -> None:
+    def update(self, tracked, time_sec: float = 0.0) -> None:
         if len(tracked) == 0 or tracked.tracker_id is None:
             return
 
@@ -80,7 +80,7 @@ class FootfallCounter:
                     if now_in_entry and not was_in_entry:
                         self.entry_count += 1
                         self.inside_ids.add(gid)
-                        self.crossing_log.append({"type": "entry", "global_id": gid, "timestamp": time.time()})
+                        self.crossing_log.append({"type": "entry", "global_id": gid, "timestamp": time_sec})
                         self._in_entry.add(tid)
                     elif not now_in_entry and was_in_entry:
                         self._in_entry.discard(tid)
@@ -92,7 +92,7 @@ class FootfallCounter:
                     if now_in_exit and not was_in_exit:
                         self.exit_count += 1
                         self.inside_ids.discard(gid)
-                        self.crossing_log.append({"type": "exit", "global_id": gid, "timestamp": time.time()})
+                        self.crossing_log.append({"type": "exit", "global_id": gid, "timestamp": time_sec})
                         self._in_exit.add(tid)
                     elif not now_in_exit and was_in_exit:
                         self._in_exit.discard(tid)
@@ -103,11 +103,11 @@ class FootfallCounter:
                     if self._line_crossed(prev_y, cy, self.entry_line_y, self.entry_direction):
                         self.entry_count += 1
                         self.inside_ids.add(gid)
-                        self.crossing_log.append({"type": "entry", "global_id": gid, "timestamp": time.time()})
+                        self.crossing_log.append({"type": "entry", "global_id": gid, "timestamp": time_sec})
                     elif self._line_crossed(prev_y, cy, self.exit_line_y, self.exit_direction):
                         self.exit_count += 1
                         self.inside_ids.discard(gid)
-                        self.crossing_log.append({"type": "exit", "global_id": gid, "timestamp": time.time()})
+                        self.crossing_log.append({"type": "exit", "global_id": gid, "timestamp": time_sec})
                 self.last_cy[tid] = cy
 
     def get_counts(self) -> dict:

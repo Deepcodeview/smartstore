@@ -234,10 +234,14 @@ export default function LiveMonitor() {
     { id:5, name:'Checkout',   type:'exit',   color:'#ef4444' },
   ]);
   const [newZoneName, setNewZoneName] = useState('');
-  const simTimerRef = useRef(null);
-  const zoneIdRef   = useRef(6);
+  const simTimerRef    = useRef(null);
+  const zoneIdRef      = useRef(6);
+  const showZoneCfgRef = useRef(false);   // stable ref — no timer restart on toggle
 
-  /* Simulation loop */
+  /* Keep ref in sync so the interval callback always reads the latest value */
+  useEffect(() => { showZoneCfgRef.current = showZoneCfg; }, [showZoneCfg]);
+
+  /* Simulation loop — pauses automatically when zone editor is open */
   useEffect(() => {
     if (!simRunning) {
       clearInterval(simTimerRef.current);
@@ -247,6 +251,8 @@ export default function LiveMonitor() {
     setScanning(true);
     setSystemStatus('RUNNING');
     simTimerRef.current = setInterval(() => {
+      // Skip tick while zone editor is open — freeze the frame
+      if (showZoneCfgRef.current) return;
       const result = genSimResult();
       setInspection(result);
       const ts = new Date().toLocaleTimeString('en-GB', { hour12:false });
@@ -312,10 +318,11 @@ export default function LiveMonitor() {
           </div>
           <div className="card-body">
             {/* Zone Config Toggle */}
-            <div style={{ marginBottom:10, display:'flex', alignItems:'center', gap:8 }}>
+            <div style={{ marginBottom:10, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
               <button onClick={() => setShowZoneCfg(v => !v)} style={{
                 display:'flex', alignItems:'center', gap:6, padding:'6px 14px', borderRadius:8,
-                cursor:'pointer', fontSize:12, fontWeight:600, border:'1px solid var(--border)',
+                cursor:'pointer', fontSize:12, fontWeight:600, border:'1.5px solid',
+                borderColor: showZoneCfg ? 'var(--brand)' : 'var(--border)',
                 background: showZoneCfg ? 'var(--brand)' : 'var(--bg)',
                 color: showZoneCfg ? '#fff' : 'var(--text-secondary)', transition:'all .15s',
               }}>🗺️ Configure Zones {showZoneCfg ? '▲' : '▼'}</button>
@@ -334,21 +341,75 @@ export default function LiveMonitor() {
               </div>
             </div>
 
-            {/* Zone Config Panel */}
+            {/* Zone Config Panel — pauses live feed while editing */}
             {showZoneCfg && (
-              <div style={{ marginBottom:14, border:'1px solid var(--border)', borderRadius:12, overflow:'hidden' }}>
+              <div style={{ marginBottom:14, border:'2px solid var(--brand)', borderRadius:12, overflow:'hidden', boxShadow:'0 0 0 4px var(--brand-light)' }}>
                 {/* Header */}
-                <div style={{ padding:'12px 16px', background:'var(--bg)', borderBottom:'1px solid var(--border)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                  <div style={{ fontWeight:700, fontSize:13, color:'var(--text-primary)' }}>📍 Store Zones Configuration</div>
-                  <button onClick={() => setZones([{id:1,name:'Entrance',type:'entry',color:'#22c55e'},{id:2,name:'Section A',type:'zone',color:'#6366f1'},{id:3,name:'Section B',type:'zone',color:'#a855f7'},{id:4,name:'Section C',type:'zone',color:'#f59e0b'},{id:5,name:'Checkout',type:'exit',color:'#ef4444'}])}
-                    style={{ padding:'4px 10px', borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--text-muted)', fontSize:11, cursor:'pointer' }}>↺ Reset</button>
+                <div style={{ padding:'12px 16px', background:'var(--brand-light)', borderBottom:'1px solid var(--border)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <span style={{ fontSize:16 }}>🗺️</span>
+                    <div>
+                      <div style={{ fontWeight:700, fontSize:13, color:'var(--brand)' }}>Store Zones Configuration</div>
+                      <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:1 }}>Live feed is paused while editing · Changes apply immediately on close</div>
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                    <button onClick={() => setZones([
+                      {id:1,name:'Entrance',type:'entry',color:'#22c55e'},
+                      {id:2,name:'Section A',type:'zone',color:'#6366f1'},
+                      {id:3,name:'Section B',type:'zone',color:'#a855f7'},
+                      {id:4,name:'Section C',type:'zone',color:'#f59e0b'},
+                      {id:5,name:'Checkout',type:'exit',color:'#ef4444'},
+                    ])}
+                      style={{ padding:'5px 12px', borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--text-muted)', fontSize:11, cursor:'pointer' }}>↺ Reset</button>
+                    <button onClick={() => setShowZoneCfg(false)}
+                      style={{ padding:'5px 14px', borderRadius:6, border:'none', background:'var(--brand)', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                      ✓ Apply & Close
+                    </button>
+                  </div>
+                </div>
+
+                {/* Live preview of zones on dark background */}
+                <div style={{ padding:'12px 16px', background:'#0f172a', borderBottom:'1px solid var(--border)' }}>
+                  <div style={{ fontSize:11, color:'#64748b', marginBottom:8, fontWeight:600 }}>ZONE LAYOUT PREVIEW</div>
+                  <svg viewBox="0 0 100 40" style={{ width:'100%', maxWidth:480, borderRadius:8, display:'block' }}>
+                    <rect x="0" y="0" width="100" height="40" fill="#1e293b" rx="2"/>
+                    {(() => {
+                      const n = zones.length;
+                      const cols = Math.ceil(Math.sqrt(n)) || 1;
+                      const rows = Math.ceil(n / cols);
+                      const cw = 94 / cols;
+                      const ch = 36 / rows;
+                      return zones.map((z, i) => {
+                        const col = i % cols, row = Math.floor(i / cols);
+                        const x = 3 + col * cw, y = 2 + row * ch;
+                        return (
+                          <g key={z.id}>
+                            <rect x={x} y={y} width={cw - 0.8} height={ch - 0.8} rx="1"
+                              fill={`${z.color}22`} stroke={z.color} strokeWidth="0.6"/>
+                            <text x={x + (cw - 0.8)/2} y={y + ch/2 + 1.2} textAnchor="middle"
+                              fontSize="3.2" fill={z.color} fontFamily="monospace" fontWeight="bold">
+                              {z.name.length > 10 ? z.name.slice(0, 10) + '…' : z.name}
+                            </text>
+                            {z.type !== 'zone' && (
+                              <text x={x + (cw - 0.8)/2} y={y + ch/2 + 5.2} textAnchor="middle"
+                                fontSize="2.6" fill={z.type==='entry'?'#4ade80':'#f87171'} fontFamily="monospace">
+                                {z.type === 'entry' ? '▶ ENTRY' : '◀ EXIT'}
+                              </text>
+                            )}
+                          </g>
+                        );
+                      });
+                    })()}
+                    <text x="50" y="39" textAnchor="middle" fontSize="2" fill="rgba(148,163,184,.4)" fontFamily="monospace">SMART RETAIL · ZONE PREVIEW</text>
+                  </svg>
                 </div>
 
                 {/* Zone rows */}
                 <div style={{ background:'var(--white)' }}>
                   {zones.map((z, idx) => (
                     <div key={z.id} style={{
-                      display:'grid', gridTemplateColumns:'auto 1fr auto auto auto',
+                      display:'grid', gridTemplateColumns:'auto 1fr auto auto',
                       alignItems:'center', gap:10, padding:'10px 16px',
                       borderBottom: idx < zones.length-1 ? '1px solid var(--border)' : 'none',
                       background:'var(--white)',
@@ -380,7 +441,7 @@ export default function LiveMonitor() {
 
                       {/* Delete */}
                       <button onClick={() => setZones(prev => prev.filter(x => x.id !== z.id))}
-                        style={{ width:28, height:28, borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', cursor:'pointer', color:'var(--text-muted)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>×</button>
+                        style={{ width:28, height:28, borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', cursor:'pointer', color:'var(--red)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>×</button>
                     </div>
                   ))}
                 </div>
@@ -388,11 +449,28 @@ export default function LiveMonitor() {
                 {/* Add new zone */}
                 <div style={{ padding:'10px 16px', background:'var(--bg)', borderTop:'1px solid var(--border)', display:'flex', gap:8, alignItems:'center' }}>
                   <input value={newZoneName} onChange={e => setNewZoneName(e.target.value)}
-                    onKeyDown={e => { if(e.key==='Enter' && newZoneName.trim()) { setZones(prev=>[...prev,{id:zoneIdRef.current++,name:newZoneName.trim(),type:'zone',color:'#0ea5e9'}]); setNewZoneName(''); }}}
+                    onKeyDown={e => {
+                      if(e.key==='Enter' && newZoneName.trim()) {
+                        setZones(prev=>[...prev,{id:zoneIdRef.current++,name:newZoneName.trim(),type:'zone',color:'#0ea5e9'}]);
+                        setNewZoneName('');
+                      }
+                    }}
                     placeholder="Zone name (e.g. Section D, Aisle 3)…"
                     style={{ flex:1, padding:'8px 12px', borderRadius:8, border:'1px solid var(--border)', fontSize:12, fontFamily:'var(--font-m)', background:'var(--white)', outline:'none' }}/>
-                  <button onClick={() => { if(!newZoneName.trim()) return; setZones(prev=>[...prev,{id:zoneIdRef.current++,name:newZoneName.trim(),type:'zone',color:'#0ea5e9'}]); setNewZoneName(''); }}
+                  <button onClick={() => {
+                    if(!newZoneName.trim()) return;
+                    setZones(prev=>[...prev,{id:zoneIdRef.current++,name:newZoneName.trim(),type:'zone',color:'#0ea5e9'}]);
+                    setNewZoneName('');
+                  }}
                     className="btn btn-primary" style={{ padding:'8px 18px', fontSize:12, whiteSpace:'nowrap' }}>+ Add Zone</button>
+                </div>
+
+                {/* Apply banner */}
+                <div style={{ padding:'10px 16px', background:'#eff6ff', borderTop:'1px solid #bfdbfe', display:'flex', alignItems:'center', gap:10 }}>
+                  <span style={{ fontSize:13 }}>💡</span>
+                  <span style={{ fontSize:12, color:'#1e40af' }}>
+                    Click <strong>✓ Apply & Close</strong> to update the live feed with these zones. The simulation SVG will instantly reflect your changes.
+                  </span>
                 </div>
               </div>
             )}
@@ -400,6 +478,7 @@ export default function LiveMonitor() {
             <PCBCanvas
               inspection={inspection}
               zones={zones}
+              paused={showZoneCfg}
               onSourceChange={(isReal) => {
                 if (isReal) { setScanning(true); setSystemStatus('RUNNING'); }
                 else { setScanning(simRunning); }

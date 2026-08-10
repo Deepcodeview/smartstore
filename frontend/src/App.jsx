@@ -72,7 +72,6 @@ const NAV = {
   store_manager: [
     { id: 'dashboard',   label: 'Live Dashboard',   icon: 'chart'    },
     { id: 'live',        label: 'Live Monitor',      icon: 'monitor'  },
-    { id: 'jobs',        label: 'Video Jobs',        icon: 'video'    },
     { id: 'crossings',   label: 'Footfall Log',      icon: 'people'   },
     { id: 'trends',      label: 'Trends',            icon: 'trend'    },
     { id: 'sales',       label: 'Sales & Marketing', icon: 'sales'    },
@@ -89,7 +88,6 @@ const NAV = {
   ],
   analyst: [
     { id: 'dashboard',   label: 'Analytics',         icon: 'chart'    },
-    { id: 'jobs',        label: 'All Jobs',           icon: 'video'    },
     { id: 'crossings',   label: 'Crossing Events',   icon: 'people'   },
     { id: 'trends',      label: 'Trends',            icon: 'trend'    },
     { id: 'sales',       label: 'Sales & Marketing', icon: 'sales'    },
@@ -105,7 +103,6 @@ const NAV = {
     { id: 'admin',       label: 'Admin Dashboard',   icon: 'globe'    },
     { id: 'dashboard',   label: 'Live Dashboard',    icon: 'chart'    },
     { id: 'live',        label: 'Live Monitor',      icon: 'monitor'  },
-    { id: 'jobs',        label: 'All Jobs',           icon: 'video'    },
     { id: 'crossings',   label: 'Footfall Log',      icon: 'people'   },
     { id: 'trends',      label: 'Trends',            icon: 'trend'    },
     { id: 'sales',       label: 'Sales & Marketing', icon: 'sales'    },

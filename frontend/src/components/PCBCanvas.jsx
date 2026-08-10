@@ -614,66 +614,111 @@ const _ENTRY_COLOR  = '#22c55e';
 const _EXIT_COLOR   = '#ef4444';
 const _ZONE_NAMES   = ['Zone A', 'Zone B', 'Zone C', 'Zone D', 'Zone E'];
 
-// ZoneDrawer — controlled: zones state lives in parent VideoUploadStream
+// ZoneDrawer — rewritten with stable RAF draw loop, no stale closure issues
 function ZoneDrawer({ frameUrl, zones, setZones, entryZone, setEntryZone, exitZone, setExitZone, disabled }) {
-  const canvasRef    = useRef();
+  const canvasRef   = useRef(null);
+  const imgRef      = useRef(null);        // always latest loaded image
+  const zonesRef    = useRef(zones);
+  const entryRef    = useRef(entryZone);
+  const exitRef     = useRef(exitZone);
+  const rafRef      = useRef(null);
   const [tool,       setTool]       = useState('zone');
   const [activeZone, setActiveZone] = useState(null);
-  const [imgLoaded,  setImgLoaded]  = useState(false);
-  const imgRef = useRef(new Image());
+  const [imgReady,   setImgReady]   = useState(false);
 
+  // Keep refs in sync — no stale closures in rAF loop
+  useEffect(() => { zonesRef.current  = zones;      }, [zones]);
+  useEffect(() => { entryRef.current  = entryZone;  }, [entryZone]);
+  useEffect(() => { exitRef.current   = exitZone;   }, [exitZone]);
+
+  // Load image once per frameUrl — never causes canvas reset
   useEffect(() => {
-    imgRef.current.onload = () => {
-      if (canvasRef.current) {
-        canvasRef.current.width  = imgRef.current.naturalWidth  || 800;
-        canvasRef.current.height = imgRef.current.naturalHeight || 450;
+    setImgReady(false);
+    const img = new window.Image();
+    img.onload = () => {
+      imgRef.current = img;
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.width  = img.naturalWidth  || 800;
+        canvas.height = img.naturalHeight || 450;
       }
-      setImgLoaded(true);
+      setImgReady(true);
     };
-    imgRef.current.src = frameUrl;
+    img.onerror = () => console.warn('ZoneDrawer: failed to load frame');
+    img.src = frameUrl;
+    // Already cached
+    if (img.complete && img.naturalWidth > 0) {
+      imgRef.current = img;
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.width  = img.naturalWidth  || 800;
+        canvas.height = img.naturalHeight || 450;
+      }
+      setImgReady(true);
+    }
+    return () => { img.onload = null; img.onerror = null; };
   }, [frameUrl]);
 
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !imgLoaded) return;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    ctx.drawImage(imgRef.current, 0, 0, W, H);
+  // Single rAF draw loop — reads from refs, never recreated
+  useEffect(() => {
+    if (!imgReady) return;
 
-    const drawPoly = (zone, color, label) => {
-      if (!zone || zone.points.length < 1) return;
-      ctx.strokeStyle = color; ctx.lineWidth = 2.5;
-      ctx.fillStyle = color + '35';
-      ctx.setLineDash(zone.closed ? [] : [6, 3]);
-      ctx.beginPath();
-      ctx.moveTo(zone.points[0].x * W, zone.points[0].y * H);
-      zone.points.forEach(p => ctx.lineTo(p.x * W, p.y * H));
-      if (zone.closed) ctx.closePath();
-      ctx.stroke();
-      if (zone.closed) ctx.fill();
-      ctx.setLineDash([]);
-      zone.points.forEach(p => {
-        ctx.beginPath(); ctx.arc(p.x * W, p.y * H, 5, 0, Math.PI * 2);
-        ctx.fillStyle = color; ctx.fill();
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
-      });
-      if (zone.points.length >= 2) {
-        const cx = zone.points.reduce((s, p) => s + p.x, 0) / zone.points.length * W;
-        const cy = zone.points.reduce((s, p) => s + p.y, 0) / zone.points.length * H;
-        ctx.fillStyle = color; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center';
-        ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 3;
-        ctx.strokeText(label, cx, cy);
-        ctx.fillText(label, cx, cy);
-      }
+    const drawFrame = () => {
+      const canvas = canvasRef.current;
+      const img    = imgRef.current;
+      if (!canvas || !img) { rafRef.current = requestAnimationFrame(drawFrame); return; }
+
+      const W = canvas.width  || 800;
+      const H = canvas.height || 450;
+      const ctx = canvas.getContext('2d');
+
+      ctx.clearRect(0, 0, W, H);
+      ctx.drawImage(img, 0, 0, W, H);
+
+      const drawPoly = (zone, color, label) => {
+        if (!zone || zone.points.length < 1) return;
+        const pts = zone.points;
+        ctx.strokeStyle = color;
+        ctx.lineWidth   = 2.5;
+        ctx.fillStyle   = color + '35';
+        ctx.setLineDash(zone.closed ? [] : [6, 3]);
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x * W, pts[0].y * H);
+        pts.forEach(p => ctx.lineTo(p.x * W, p.y * H));
+        if (zone.closed) ctx.closePath();
+        ctx.stroke();
+        if (zone.closed) ctx.fill();
+        ctx.setLineDash([]);
+        // Vertex dots
+        pts.forEach(p => {
+          ctx.beginPath(); ctx.arc(p.x * W, p.y * H, 5, 0, Math.PI * 2);
+          ctx.fillStyle = color; ctx.fill();
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+        });
+        // Label
+        if (pts.length >= 2) {
+          const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length * W;
+          const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length * H;
+          ctx.textAlign = 'center';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 3;
+          ctx.strokeText(label, cx, cy);
+          ctx.fillStyle = color; ctx.lineWidth = 1;
+          ctx.fillText(label, cx, cy);
+        }
+      };
+
+      zonesRef.current.forEach((z, zi) =>
+        drawPoly(z, z.color || _ZONE_COLORS[zi % _ZONE_COLORS.length], z.name));
+      drawPoly(entryRef.current, entryRef.current?.color || _ENTRY_COLOR, entryRef.current?.name || '⬡ ENTRY');
+      drawPoly(exitRef.current,  exitRef.current?.color  || _EXIT_COLOR,  exitRef.current?.name  || '⬡ EXIT');
+
+      rafRef.current = requestAnimationFrame(drawFrame);
     };
 
-    zones.forEach((zone, zi) => drawPoly(zone, zone.color || _ZONE_COLORS[zi % _ZONE_COLORS.length], zone.name));
-    drawPoly(entryZone, entryZone?.color || _ENTRY_COLOR, entryZone?.name || '⬡ ENTRY');
-    drawPoly(exitZone,  exitZone?.color  || _EXIT_COLOR,  exitZone?.name  || '⬡ EXIT');
-  }, [zones, entryZone, exitZone, imgLoaded]);
-
-  useEffect(() => { draw(); }, [draw]);
+    rafRef.current = requestAnimationFrame(drawFrame);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [imgReady]);  // ← only restarts when image loads, NOT on every zone click
 
   const getRelPos = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -691,7 +736,6 @@ function ZoneDrawer({ frameUrl, zones, setZones, entryZone, setEntryZone, exitZo
     if (tool === 'zone') {
       if (activeZone === null) {
         const idx = zones.length;
-        // Use initialZone name if available, else Zone N
         setZones(prev => [...prev, { name: `Zone ${idx + 1}`, color: _ZONE_COLORS[idx % _ZONE_COLORS.length], points: [pos], closed: false }]);
         setActiveZone(idx);
       } else {
@@ -744,11 +788,12 @@ function ZoneDrawer({ frameUrl, zones, setZones, entryZone, setEntryZone, exitZo
       </div>
 
       <div style={{ position:'relative' }}>
-        <canvas ref={canvasRef} width={800} height={450} onClick={handleCanvasClick}
-          style={{ width:'100%', cursor: disabled ? 'default' : 'crosshair', display:'block' }}/>
-        {!imgLoaded && (
-          <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:'#0a0e14' }}>
+        <canvas ref={canvasRef} onClick={handleCanvasClick}
+          style={{ width:'100%', minHeight:320, cursor: disabled ? 'default' : 'crosshair', display:'block', background:'#0a0e14' }}/>
+        {!imgReady && (
+          <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:12, background:'#0a0e14' }}>
             <div className="spinner" style={{ width:32, height:32 }}/>
+            <div style={{ color:'#94a3b8', fontSize:12 }}>Loading frame…</div>
           </div>
         )}
       </div>
@@ -798,7 +843,99 @@ function ZoneDrawer({ frameUrl, zones, setZones, entryZone, setEntryZone, exitZo
   );
 }
 
-function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones }) {
+/* ═══════════════════════════════════════════════════
+   STREAM ZONE OVERLAY
+   Draws user's saved zone polygons over the MJPEG
+   stream using a transparent canvas on top of <img>
+═══════════════════════════════════════════════════ */
+function StreamZoneOverlay({ zones, entryZone, exitZone }) {
+  const canvasRef = useRef(null);
+  const rafRef    = useRef(null);
+  const zonesRef  = useRef(zones);
+  const entryRef  = useRef(entryZone);
+  const exitRef   = useRef(exitZone);
+
+  useEffect(() => { zonesRef.current = zones;     }, [zones]);
+  useEffect(() => { entryRef.current = entryZone; }, [entryZone]);
+  useEffect(() => { exitRef.current  = exitZone;  }, [exitZone]);
+
+  useEffect(() => {
+    const draw = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) { rafRef.current = requestAnimationFrame(draw); return; }
+      const W = canvas.offsetWidth  || 640;
+      const H = canvas.offsetHeight || 360;
+      if (canvas.width !== W || canvas.height !== H) {
+        canvas.width  = W;
+        canvas.height = H;
+      }
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, W, H);
+
+      const drawPoly = (zone, color, label) => {
+        if (!zone || zone.points.length < 2) return;
+        const pts = zone.points;
+        ctx.strokeStyle = color;
+        ctx.lineWidth   = 2;
+        ctx.fillStyle   = color + '28';
+        ctx.setLineDash(zone.closed ? [] : [6, 3]);
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x * W, pts[0].y * H);
+        pts.forEach(p => ctx.lineTo(p.x * W, p.y * H));
+        if (zone.closed) ctx.closePath();
+        ctx.stroke();
+        if (zone.closed) ctx.fill();
+        ctx.setLineDash([]);
+        // Vertex dots
+        pts.forEach(p => {
+          ctx.beginPath(); ctx.arc(p.x * W, p.y * H, 4, 0, Math.PI * 2);
+          ctx.fillStyle = color; ctx.fill();
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+        });
+        // Label pill
+        if (pts.length >= 2) {
+          const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length * W;
+          const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length * H;
+          ctx.font = 'bold 13px sans-serif';
+          ctx.textAlign = 'center';
+          const tw = ctx.measureText(label).width + 14;
+          ctx.fillStyle = color + 'cc';
+          ctx.beginPath();
+          ctx.roundRect ? ctx.roundRect(cx - tw/2, cy - 10, tw, 20, 4)
+            : ctx.rect(cx - tw/2, cy - 10, tw, 20);
+          ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.fillText(label, cx, cy + 4);
+        }
+      };
+
+      zonesRef.current.forEach((z, zi) =>
+        drawPoly(z, z.color || _ZONE_COLORS[zi % _ZONE_COLORS.length], z.name));
+      if (entryRef.current) drawPoly(entryRef.current, entryRef.current.color || _ENTRY_COLOR, entryRef.current.name || 'Entry');
+      if (exitRef.current)  drawPoly(exitRef.current,  exitRef.current.color  || _EXIT_COLOR,  exitRef.current.name  || 'Exit');
+
+      rafRef.current = requestAnimationFrame(draw);
+    };
+    rafRef.current = requestAnimationFrame(draw);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, []);
+
+  const hasZones = zones.length > 0 || entryZone || exitZone;
+  if (!hasZones) return null;
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: 'absolute', inset: 0,
+        width: '100%', height: '100%',
+        pointerEvents: 'none', zIndex: 5,
+      }}
+    />
+  );
+}
+
+function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones, confThresh }) {
   const fileRef    = useRef(null);
   const jobIdRef   = useRef(null);
   const [phase,      setPhase]      = useState('idle');
@@ -861,6 +998,8 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones }) {
     setDrawnExitZoneSynced(newExit);
   };
 
+  const [liveMetrics, setLiveMetrics] = useState(null);
+
   useEffect(() => {
     if (phase !== 'streaming' || !jobId) return;
     pollRef.current = setInterval(async () => {
@@ -869,8 +1008,11 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones }) {
         if (!r.ok) return;
         const d = await r.json();
         setProgress(d.progress || 0);
+        // Live metrics available during processing
+        if (d.analytics) setLiveMetrics(d.analytics);
         if (d.status === 'completed') {
           setPhase('done'); setProgress(100);
+          if (d.analytics) setLiveMetrics(d.analytics);
           clearInterval(pollRef.current); setSystemStatus('IDLE');
           addConsoleEntry({ time: new Date().toLocaleTimeString('en-GB',{hour12:false}), tag:'INFO', tagClass:'INFO', msg:`[INFO] Video processing complete — job ${jobId.slice(0,8)}` });
         } else if (d.status === 'failed') {
@@ -878,7 +1020,7 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones }) {
           clearInterval(pollRef.current);
         }
       } catch(_) {}
-    }, 2000);
+    }, 1500);
     return () => clearInterval(pollRef.current);
   }, [phase, jobId]);
 
@@ -934,6 +1076,7 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones }) {
       fd2.append('zones',      JSON.stringify(payload.zones));
       fd2.append('entry_zone', JSON.stringify(payload.entry_zone));
       fd2.append('exit_zone',  JSON.stringify(payload.exit_zone));
+      fd2.append('conf',       String(confThresh));
       const r2 = await fetch(`${API_BASE}/jobs/${jid}/start`, { method:'POST', body:fd2 });
       if (!r2.ok) throw new Error(`Start failed: ${r2.status}`);
     } catch(e) { setProcessing(false); setPhase('error'); setErrMsg(e.message); return; }
@@ -947,6 +1090,7 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones }) {
     if (frameUrl) URL.revokeObjectURL(frameUrl);
     setPhase('idle'); setJobId(null); setFileName(''); setProgress(0);
     setErrMsg(''); setFrameUrl(''); setProcessing(false);
+    setLiveMetrics(null);
     setDrawnZonesSynced([]); setDrawnEntryZoneSynced(null); setDrawnExitZoneSynced(null);
     setSystemStatus('IDLE');
   };
@@ -1040,15 +1184,24 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones }) {
       {/* MJPEG Live Stream */}
       {(phase === 'streaming' || phase === 'done') && jobId && (
         <div>
+          {/* Zone overlay canvas on top of MJPEG stream */}
           <div style={{ position:'relative', background:'#0a0e14', borderRadius:14, overflow:'hidden',
             border:`2px solid ${phase==='done'?'var(--green)':'var(--brand)'}` }}>
             {phase === 'streaming' ? (
-              <img
-                src={`${API_BASE}/jobs/${jobId}/stream`}
-                alt="Live stream"
-                style={{ width:'100%', display:'block', minHeight:360 }}
-                onError={e => { e.target.style.opacity='0.3'; }}
-              />
+              <>
+                <img
+                  src={`${API_BASE}/jobs/${jobId}/stream`}
+                  alt="Live stream"
+                  style={{ width:'100%', display:'block', minHeight:360 }}
+                  onError={e => { e.target.style.opacity='0.3'; }}
+                />
+                {/* Zone polygon overlay */}
+                <StreamZoneOverlay
+                  zones={drawnZones}
+                  entryZone={drawnEntryZone}
+                  exitZone={drawnExitZone}
+                />
+              </>
             ) : (
               <div style={{ padding:48, textAlign:'center' }}>
                 <div style={{ fontSize:40, marginBottom:12 }}>✅</div>
@@ -1077,23 +1230,87 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones }) {
                 </span>
               )}
             </div>
-            {phase === 'streaming' && (
+
+            {/* Live footfall metrics — top right */}
+            {phase === 'streaming' && liveMetrics && (
+              <div style={{ position:'absolute', top:10, right:10, display:'flex', flexDirection:'column', gap:4, alignItems:'flex-end' }}>
+                <div style={{ display:'flex', gap:4 }}>
+                  <span style={{...TAG, background:'rgba(22,163,74,.92)', fontSize:11, fontWeight:700}}>
+                    🚶 {liveMetrics.entries ?? 0} Entries
+                  </span>
+                  <span style={{...TAG, background:'rgba(220,38,38,.92)', fontSize:11, fontWeight:700}}>
+                    🚪 {liveMetrics.exits ?? 0} Exits
+                  </span>
+                </div>
+                <div style={{ display:'flex', gap:4 }}>
+                  <span style={{...TAG, background:'rgba(99,102,241,.92)', fontSize:11, fontWeight:700}}>
+                    👥 {liveMetrics.currently_inside ?? 0} Inside
+                  </span>
+                  <span style={{...TAG, background:'rgba(15,23,42,.88)', fontSize:11, fontWeight:700}}>
+                    🆔 {liveMetrics.total_unique_people ?? 0} Unique
+                  </span>
+                </div>
+                <span style={{...TAG, fontSize:9}}>{progress}% processed</span>
+              </div>
+            )}
+            {phase === 'streaming' && !liveMetrics && (
               <div style={{ position:'absolute', top:10, right:10 }}>
                 <span style={{...TAG, fontSize:10}}>{progress}% processed</span>
               </div>
             )}
           </div>
 
-          {/* Progress bar */}
+          {/* Progress bar + Edit Zones button */}
           {phase === 'streaming' && (
             <div style={{ marginTop:10 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
                 <span style={{ fontSize:12, color:'var(--text-muted)' }}>🧠 YOLOv8n processing…</span>
-                <span style={{ fontSize:12, fontWeight:700, color:'var(--brand)' }}>{progress}%</span>
+                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                  <button
+                    onClick={() => setPhase('zone_edit_live')}
+                    style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 12px', borderRadius:7,
+                      border:'1.5px solid var(--brand)', background:'var(--brand-light)', color:'var(--brand)',
+                      fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                    ✏️ Edit Zones
+                  </button>
+                  <span style={{ fontSize:12, fontWeight:700, color:'var(--brand)' }}>{progress}%</span>
+                </div>
               </div>
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width:`${progress}%` }}/>
               </div>
+
+              {/* Live footfall counter strip */}
+              {liveMetrics && (
+                <div style={{ display:'flex', gap:8, marginTop:10, flexWrap:'wrap' }}>
+                  {[
+                    { label:'Entries',        value: liveMetrics.entries        ?? 0, color:'#16a34a', icon:'🚶' },
+                    { label:'Exits',          value: liveMetrics.exits          ?? 0, color:'#dc2626', icon:'🚪' },
+                    { label:'Inside Now',     value: liveMetrics.currently_inside ?? 0, color:'#6366f1', icon:'👥' },
+                    { label:'Unique People',  value: liveMetrics.total_unique_people ?? 0, color:'#0284c7', icon:'🆔' },
+                    { label:'Shelf',          value: liveMetrics.shelf_status   ?? '—', color: liveMetrics.shelf_status === 'EMPTY' ? '#dc2626' : liveMetrics.shelf_status === 'LOW STOCK' ? '#d97706' : '#16a34a', icon:'📦' },
+                  ].map(m => (
+                    <div key={m.label} style={{ flex:1, minWidth:90, padding:'10px 12px', borderRadius:10,
+                      background:'var(--white)', border:`1.5px solid ${m.color}30`,
+                      borderTop:`3px solid ${m.color}`, textAlign:'center' }}>
+                      <div style={{ fontSize:18, marginBottom:2 }}>{m.icon}</div>
+                      <div style={{ fontSize:20, fontWeight:800, color:m.color, fontFamily:'var(--font-b)' }}>{m.value}</div>
+                      <div style={{ fontSize:10, color:'var(--text-muted)', fontWeight:600, marginTop:2 }}>{m.label}</div>
+                    </div>
+                  ))}
+                  {liveMetrics.zones?.most_popular && (
+                    <div style={{ flex:1, minWidth:90, padding:'10px 12px', borderRadius:10,
+                      background:'var(--white)', border:'1.5px solid #a855f730',
+                      borderTop:'3px solid #a855f7', textAlign:'center' }}>
+                      <div style={{ fontSize:18, marginBottom:2 }}>🗺️</div>
+                      <div style={{ fontSize:13, fontWeight:800, color:'#a855f7', fontFamily:'var(--font-b)' }}>
+                        {liveMetrics.zones.most_popular || '—'}
+                      </div>
+                      <div style={{ fontSize:10, color:'var(--text-muted)', fontWeight:600, marginTop:2 }}>Top Zone</div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -1177,7 +1394,7 @@ const SOURCES = [
   { id:'ip',         label:'Company Camera', icon:'📡', color:'#d97706' },
 ];
 
-export default function PCBCanvas({ inspection, onSourceChange, zones }) {
+export default function PCBCanvas({ inspection, onSourceChange, zones, paused }) {
   // ── Global store: feed all results into app state ──
   const {
     addBoard, addAlert, addConsoleEntry, setSystemStatus, setCameraState,
@@ -1192,6 +1409,10 @@ export default function PCBCanvas({ inspection, onSourceChange, zones }) {
     startSim:        s.startSim,
     stopSim:         s.stopSim,
   })));
+
+  // Stable ref so captureAndInfer always reads latest paused value (no stale closure)
+  const pausedRef = useRef(false);
+  useEffect(() => { pausedRef.current = paused; }, [paused]);
 
   // Video detections polling hook
   const { startPolling, stopPolling } = useVideoDetections();
@@ -1357,6 +1578,7 @@ export default function PCBCanvas({ inspection, onSourceChange, zones }) {
   const captureAndInfer = useCallback(async () => {
     if (processingRef.current) return;
     if (camPausedRef.current) return;  // Skip when paused
+    if (pausedRef.current) return;     // Skip when zone editor is open
     const cap = captureRef.current;
     if (!cap) return;
     const ctx = cap.getContext('2d');
@@ -1663,13 +1885,23 @@ export default function PCBCanvas({ inspection, onSourceChange, zones }) {
 
       {/* ── SIMULATION ── */}
       {source === 'simulation' && (
-        <RetailStoreBoard
-          inspection={simRunning ? inspection : null}
-          simRunning={simRunning}
-          onStartSim={startSim}
-          onStopSim={stopSim}
-          zones={zones}
-        />
+        <div style={{ position:'relative' }}>
+          <RetailStoreBoard
+            inspection={paused ? null : (simRunning ? inspection : null)}
+            simRunning={simRunning && !paused}
+            onStartSim={startSim}
+            onStopSim={stopSim}
+            zones={zones}
+          />
+          {paused && (
+            <div style={{ position:'absolute', inset:0, background:'rgba(10,14,20,0.72)', borderRadius:14, zIndex:10,
+              display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:10, backdropFilter:'blur(2px)' }}>
+              <div style={{ fontSize:36 }}>⏸</div>
+              <div style={{ color:'#fff', fontWeight:700, fontSize:14 }}>Simulation paused</div>
+              <div style={{ color:'rgba(255,255,255,.6)', fontSize:12 }}>Close zone editor to resume</div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── WEBCAM ── */}
@@ -1731,10 +1963,17 @@ export default function PCBCanvas({ inspection, onSourceChange, zones }) {
                 <div style={{ fontSize:11 }}>Browser Settings → Allow Camera → Refresh page</div>
               </div>
             ) : (
-              <video ref={camRef} muted playsInline autoPlay style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', objectFit:'contain', display:'block' }}/>
+              <video ref={camRef} muted playsInline autoPlay style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', objectFit:'contain', display:'block', filter: paused ? 'brightness(0.35)' : 'none', transition:'filter .3s' }}/>
             )}
-            <VideoOverlay result={result} videoEl={camRef} processing={processing}/>
-            <VideoHUD label="📷 WEBCAM LIVE" result={result} processing={processing} frameNo={frameNo} fps={liveFps} confThresh={confThresh}/>
+            {paused && (
+              <div style={{ position:'absolute', inset:0, zIndex:10, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:10, pointerEvents:'none' }}>
+                <div style={{ fontSize:36 }}>⏸</div>
+                <div style={{ color:'#fff', fontWeight:700, fontSize:14, textShadow:'0 1px 4px #000' }}>Live feed paused</div>
+                <div style={{ color:'rgba(255,255,255,.6)', fontSize:12, textShadow:'0 1px 4px #000' }}>Close zone editor to resume</div>
+              </div>
+            )}
+            <VideoOverlay result={paused ? null : result} videoEl={camRef} processing={processing}/>
+            <VideoHUD label="📷 WEBCAM LIVE" result={paused ? null : result} processing={processing} frameNo={frameNo} fps={liveFps} confThresh={confThresh}/>
           </div>
         </div>
       )}
@@ -1745,6 +1984,7 @@ export default function PCBCanvas({ inspection, onSourceChange, zones }) {
           addConsoleEntry={addConsoleEntry}
           zones={zones}
           setSystemStatus={setSystemStatus}
+          confThresh={confThresh}
         />
       )}
 
@@ -1859,7 +2099,7 @@ export default function PCBCanvas({ inspection, onSourceChange, zones }) {
                 fd.append('file', file, file.name);
                 const _token = localStorage.getItem('retail_token');
                 const res = await fetch(
-                  `${API_BASE}/camera/inspect-image?conf=0.40`,
+                  `${API_BASE}/camera/inspect-image?conf=${confThresh}`,
                   { method:'POST', body:fd, headers: _token ? { Authorization: `Bearer ${_token}` } : {} }
                 );
                 if (res.ok) {

@@ -137,10 +137,10 @@ function ZoneEditor({ frameUrl, videoWidth, videoHeight, onConfirm }) {
     const closedZones = zones.filter(z => z.closed && z.points.length >= 3)
     const zonesPayload = closedZones.map(z => ({
       name: z.name,
-      points: z.points.map(p => [Math.round(p.x * videoWidth), Math.round(p.y * videoHeight)])
+      points: z.points.map(p => [Math.round(p.x * 100), Math.round(p.y * 100)])
     }))
     const toPoints = (zone) => zone && zone.closed && zone.points.length >= 3
-      ? zone.points.map(p => [Math.round(p.x * videoWidth), Math.round(p.y * videoHeight)])
+      ? zone.points.map(p => [Math.round(p.x * 100), Math.round(p.y * 100)])
       : []
     onConfirm({
       zones:      zonesPayload,
@@ -449,6 +449,7 @@ export default function Jobs({ onSelectJob, selectedJobId, jobs, onRefresh }) {
     form.append('zones',      JSON.stringify(zones))
     form.append('entry_zone', JSON.stringify(entry_zone))
     form.append('exit_zone',  JSON.stringify(exit_zone))
+    form.append('conf',       '0.35')
     try {
       if (activeJobId === 'camera_temp') {
         form.append('camera_source', cameraSource)

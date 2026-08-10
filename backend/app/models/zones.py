@@ -61,7 +61,11 @@ class ZoneAnalyzer:
         """
         self._frame_count += 1
         zone_counts: Dict[str, int] = {}
-        global_ids = detections.data.get("global_id", None) if len(detections) > 0 else None
+        
+        # Pop global_id to avoid ValueError in supervision's PolygonZone.trigger validation
+        global_ids = None
+        if len(detections) > 0 and "global_id" in detections.data:
+            global_ids = detections.data.pop("global_id")
 
         for name, zone in self.zones.items():
             if len(detections) > 0:
@@ -78,6 +82,10 @@ class ZoneAnalyzer:
 
             self._zone_accumulator[name] += count
             zone_counts[name] = count
+
+        # Restore global_id to detections.data
+        if global_ids is not None:
+            detections.data["global_id"] = global_ids
 
         # Update heatmap with centroid positions
         if len(detections) > 0:
