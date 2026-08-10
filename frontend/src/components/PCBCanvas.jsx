@@ -1187,45 +1187,36 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones, confThresh
           {/* Zone overlay canvas on top of MJPEG stream */}
           <div style={{ position:'relative', background:'#0a0e14', borderRadius:14, overflow:'hidden',
             border:`2px solid ${phase==='done'?'var(--green)':'var(--brand)'}` }}>
-            {phase === 'streaming' ? (
-              <>
-                <img
-                  src={`${API_BASE}/jobs/${jobId}/stream`}
-                  alt="Video stream"
-                  style={{ width:'100%', display:'block', minHeight:360 }}
-                  onError={e => { e.target.style.opacity='0.3'; }}
-                />
-                {/* Zone polygon overlay */}
-                <StreamZoneOverlay
-                  zones={drawnZones}
-                  entryZone={drawnEntryZone}
-                  exitZone={drawnExitZone}
-                />
-              </>
-            ) : (
-              <video
-                src={`${API_BASE}/jobs/${jobId}/video`}
-                controls
-                autoPlay
-                loop
-                muted
-                style={{ width:'100%', display:'block', minHeight:360 }}
-              />
-            )}
+            <img
+              src={phase === 'streaming' ? `${API_BASE}/jobs/${jobId}/stream` : `${API_BASE}/jobs/${jobId}/frame`}
+              alt="Video stream"
+              style={{ width:'100%', display:'block', minHeight:360 }}
+              onError={e => { e.target.style.opacity='0.3'; }}
+            />
+            {/* Zone polygon overlay */}
+            <StreamZoneOverlay
+              zones={drawnZones}
+              entryZone={drawnEntryZone}
+              exitZone={drawnExitZone}
+            />
 
             {/* HUD overlay */}
             <div style={{ position:'absolute', top:10, left:10, display:'flex', gap:6 }}>
               <span style={TAG}>CAM-01 ◎ RETAIL</span>
-              {phase === 'streaming' && (
+              {phase === 'streaming' ? (
                 <span style={{...TAG, background:'rgba(22,163,74,.9)', display:'flex', alignItems:'center', gap:5}}>
                   <span style={{ width:6, height:6, borderRadius:'50%', background:'#fff', animation:'livePulse 1s infinite', display:'inline-block' }}/>
                   LIVE
+                </span>
+              ) : (
+                <span style={{...TAG, background:'rgba(22,163,74,.9)'}}>
+                  COMPLETED
                 </span>
               )}
             </div>
 
             {/* Live footfall metrics — top right */}
-            {phase === 'streaming' && liveMetrics && (
+            {liveMetrics && (
               <div style={{ position:'absolute', top:10, right:10, display:'flex', flexDirection:'column', gap:4, alignItems:'flex-end' }}>
                 <div style={{ display:'flex', gap:4 }}>
                   <span style={{...TAG, background:'rgba(22,163,74,.92)', fontSize:11, fontWeight:700}}>
@@ -1246,7 +1237,7 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones, confThresh
                 <span style={{...TAG, fontSize:9}}>{progress}% processed</span>
               </div>
             )}
-            {phase === 'streaming' && !liveMetrics && (
+            {!liveMetrics && (
               <div style={{ position:'absolute', top:10, right:10 }}>
                 <span style={{...TAG, fontSize:10}}>{progress}% processed</span>
               </div>
@@ -1254,11 +1245,13 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones, confThresh
           </div>
 
           {/* Progress bar + Edit Zones button */}
-          {phase === 'streaming' && (
-            <div style={{ marginTop:10 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
-                <span style={{ fontSize:12, color:'var(--text-muted)' }}>🧠 YOLOv8n processing…</span>
-                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <div style={{ marginTop:10 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+              <span style={{ fontSize:12, color:'var(--text-muted)' }}>
+                {phase === 'streaming' ? '🧠 YOLOv8n processing…' : '✅ YOLOv8n processing completed'}
+              </span>
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                {phase === 'streaming' && (
                   <button
                     onClick={() => setPhase('zone_edit_live')}
                     style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 12px', borderRadius:7,
@@ -1266,9 +1259,10 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones, confThresh
                       fontSize:11, fontWeight:700, cursor:'pointer' }}>
                     ✏️ Edit Zones
                   </button>
-                  <span style={{ fontSize:12, fontWeight:700, color:'var(--brand)' }}>{progress}%</span>
-                </div>
+                )}
+                <span style={{ fontSize:12, fontWeight:700, color: phase === 'done' ? 'var(--green)' : 'var(--brand)' }}>{progress}%</span>
               </div>
+            </div>
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width:`${progress}%` }}/>
               </div>
