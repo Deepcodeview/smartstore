@@ -1187,18 +1187,31 @@ function VideoUploadStream({ addConsoleEntry, setSystemStatus, zones, confThresh
           {/* Zone overlay canvas on top of MJPEG stream */}
           <div style={{ position:'relative', background:'#0a0e14', borderRadius:14, overflow:'hidden',
             border:`2px solid ${phase==='done'?'var(--green)':'var(--brand)'}` }}>
-            <img
-              src={phase === 'streaming' ? `${API_BASE}/jobs/${jobId}/stream` : `${API_BASE}/jobs/${jobId}/frame`}
-              alt="Video stream"
-              style={{ width:'100%', display:'block', minHeight:360 }}
-              onError={e => { e.target.style.opacity='0.3'; }}
-            />
-            {/* Zone polygon overlay */}
-            <StreamZoneOverlay
-              zones={drawnZones}
-              entryZone={drawnEntryZone}
-              exitZone={drawnExitZone}
-            />
+            {phase === 'streaming' ? (
+              <>
+                <img
+                  src={`${API_BASE}/jobs/${jobId}/stream`}
+                  alt="Video stream"
+                  style={{ width:'100%', display:'block', minHeight:360 }}
+                  onError={e => { e.target.style.opacity='0.3'; }}
+                />
+                {/* Zone polygon overlay */}
+                <StreamZoneOverlay
+                  zones={drawnZones}
+                  entryZone={drawnEntryZone}
+                  exitZone={drawnExitZone}
+                />
+              </>
+            ) : (
+              <video
+                src={`${API_BASE}/jobs/${jobId}/video`}
+                controls
+                autoPlay
+                loop
+                muted
+                style={{ width:'100%', display:'block', minHeight:360 }}
+              />
+            )}
 
             {/* HUD overlay */}
             <div style={{ position:'absolute', top:10, left:10, display:'flex', gap:6 }}>

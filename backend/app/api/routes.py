@@ -102,10 +102,14 @@ def get_first_frame(job_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "Video file not found.")
 
     cap = cv2.VideoCapture(file_path)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 15)
     ret, frame = cap.read()
+    if not ret or frame is None:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        ret, frame = cap.read()
     cap.release()
-    if not ret:
-        raise HTTPException(500, "Could not read first frame.")
+    if not ret or frame is None:
+        raise HTTPException(500, "Could not read preview frame.")
 
     _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
     return Response(content=buf.tobytes(), media_type="image/jpeg")
